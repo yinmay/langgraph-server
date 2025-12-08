@@ -1,8 +1,8 @@
-import { MessagesAnnotation } from "@langchain/langgraph";
 import { BaseMessage, ToolMessage } from "@langchain/core/messages";
 import { toolsByName } from "../tools.js";
+import { AgentState } from "./callModel.js";
 
-export async function toolsNode(state: typeof MessagesAnnotation.State) {
+export async function toolsNode(state: typeof AgentState.State) {
   const messages = state.messages as BaseMessage[];
   const lastMessage = messages[messages.length - 1];
   const toolMessages: ToolMessage[] = [];
