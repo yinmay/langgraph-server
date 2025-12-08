@@ -28,6 +28,7 @@
     "@langchain/tavily": "^1.0.1",
     "dotenv": "^17.2.3",
     "langchain": "^1.1.1",
+    "pdf-parse": "^2.4.5",
     "zod": "^4.1.13"
   }
 }
