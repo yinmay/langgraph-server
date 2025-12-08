@@ -1,68 +1,8 @@
-import { StateGraph, Annotation, MessagesAnnotation } from "@langchain/langgraph";
-import { ChatOpenAI } from "@langchain/openai";
-import { BaseMessage, HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
-import { TavilySearch } from "@langchain/tavily";
-
-
-const tavilySearchTool = new TavilySearch({
-  maxResults: 3,
-  topic: "general",
-});
-
-const tools = [tavilySearchTool];
-
-// Create a map of tools by name for easy lookup
-const toolsByName: Record<string, typeof tavilySearchTool> = {
-  [tavilySearchTool.name]: tavilySearchTool,
-};
-
-// 定义 tools 节点，处理工具调用
-async function toolsNode(state: typeof MessagesAnnotation.State) {
-  const messages = state.messages as BaseMessage[];
-  const lastMessage = messages[messages.length - 1];
-  const toolMessages: ToolMessage[] = [];
-
-  if (lastMessage && "tool_calls" in lastMessage && Array.isArray(lastMessage.tool_calls)) {
-    // 执行所有工具调用
-    for (const toolCall of lastMessage.tool_calls) {
-      const tool = toolsByName[toolCall.name];
-      if (tool) {
-        const result = await tool.invoke(toolCall.args);
-        toolMessages.push(
-          new ToolMessage({
-            content: JSON.stringify(result),
-            tool_call_id: toolCall.id,
-          })
-        );
-      }
-    }
-  }
-
-  return { messages: toolMessages };
-}
-
-
-// Define the agent state
-const AgentState = Annotation.Root({
-  ...MessagesAnnotation.spec,
-});
-
-// Initialize the LLM with DeepSeek
-const model = new ChatOpenAI({
-  model: "deepseek-chat",
-  temperature: 0.7,
-  openAIApiKey: process.env.DEEPSEEK_API_KEY,
-  configuration: {
-    baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-  },
-}).bindTools(tools);
-
-// Define the agent node
-async function callModel(state: typeof AgentState.State) {
-  const { messages } = state;
-  const response = await model.invoke(messages);
-  return { messages: [response] };
-}
+import { StateGraph } from "@langchain/langgraph";
+import { AIMessage } from "@langchain/core/messages";
+import { callModel, AgentState } from "./nodes/callModel.js";
+import { toolsNode } from "./nodes/toolsNode.js";
+import { processPdf } from "./nodes/processPdf.js";
 
 // Route function to determine next node
 function routeModelOutput(state: typeof AgentState.State): string {
@@ -78,13 +18,16 @@ function routeModelOutput(state: typeof AgentState.State): string {
 }
 
 // Create the graph
-const workflow = new StateGraph(MessagesAnnotation)
-  // Define the two nodes we will cycle between
+const workflow = new StateGraph(AgentState)
+  // Define the nodes
+  .addNode("processPdf", processPdf)
   .addNode("callModel", callModel)
   .addNode("tools", toolsNode)
-  // Set the entrypoint as `callModel`
-  // This means that this node is the first one called
-  .addEdge("__start__", "callModel")
+  // Set the entrypoint as `processPdf`
+  // This node processes PDF files before calling the model
+  .addEdge("__start__", "processPdf")
+  // After processing PDF, go to callModel
+  .addEdge("processPdf", "callModel")
   .addConditionalEdges(
     // First, we define the edges' source node. We use `callModel`.
     // This means these are the edges taken after the `callModel` node is called.
