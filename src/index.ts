@@ -16,12 +16,20 @@ async function main() {
     messages: [new HumanMessage("Hello! What is LangGraph?")]
   };
 
+  // Configuration with thread_id (required for PostgreSQL checkpointer)
+  const config = {
+    configurable: {
+      thread_id: "test-thread-1"
+    }
+  };
+
   console.log('User:', input.messages[0].content);
 
-  const result = await graph.invoke(input);
+  const result = await graph.invoke(input, config);
 
   console.log('Agent:', result.messages[result.messages.length - 1].content);
-  console.log('\nAgent is ready! Use langgraph-cli to start the server.');
+  console.log('\n✅ Agent is ready! Conversation saved to PostgreSQL.');
+  console.log('Thread ID:', config.configurable.thread_id);
 }
 
 main().catch((error) => {

@@ -33,7 +33,13 @@ Copy `.env.example` to `.env` and configure:
 - `DEEPSEEK_API_KEY` - Required for DeepSeek LLM
 - `DEEPSEEK_BASE_URL` - Optional, defaults to "https://api.deepseek.com"
 - `TAVILY_API_KEY` - Required for Tavily search tool
+- `LANGGRAPH_POSTGRES_URI` - Required for PostgreSQL chat history storage (format: `postgresql://username:password@host:port/database`)
 - `NODE_ENV` - Optional, defaults to "development"
+
+**Important Note on Development Mode:**
+- When running `npm run serve` (langgraph dev), chat data is stored in `.langgraph_api` folder (local file storage)
+- PostgreSQL checkpointing only works when deployed to LangGraph Server (production mode)
+- This is a known limitation of the LangGraph development server
 
 ## Architecture
 
@@ -59,17 +65,21 @@ The codebase follows separation of concerns:
 - **`src/agent.ts`** - Workflow definition only (graph structure, routing logic)
 - **`src/config/model.ts`** - LLM configuration (DeepSeek ChatOpenAI with tool bindings)
 - **`src/config/prompt.ts`** - System prompt configuration
+- **`src/config/checkpoint.ts`** - PostgreSQL checkpointer configuration for chat history persistence
 - **`src/tools.ts`** - Tool definitions and lookup map
 - **`src/nodes/callModel.ts`** - Model invocation node (adds system prompt, calls LLM)
 - **`src/nodes/toolsNode.ts`** - Tool execution node (processes tool calls)
+- **`src/nodes/processPdf.ts`** - PDF processing node (extracts text from PDF files)
+- **`src/utils/pdfExtractor.ts`** - PDF text extraction utility
 - **`src/index.ts`** - Entry point for testing/development
 
 ### Key Architectural Patterns
 
 **State Management:**
-- Uses `MessagesAnnotation` from LangGraph for message-based state
-- State flows through nodes as `{ messages: BaseMessage[] }`
-- System prompt is automatically prepended in `callModel` node if not present
+- Uses custom `AgentState` annotation extending `MessagesAnnotation`
+- State includes: `messages`, `pdfContent` (extracted PDF text), `lastMessageIsPdf` (boolean flag)
+- State flows through nodes and is persisted in PostgreSQL via checkpointer
+- System prompt is dynamically built in `callModel` node, including PDF content when available
 
 **Tool Integration:**
 - Tools are bound to the model via `.bindTools(tools)` in model.ts
@@ -81,11 +91,34 @@ The codebase follows separation of concerns:
 - Returns `"tools"` if tool calls exist, `"__end__"` otherwise
 - This enables the cyclic pattern: model → tools → model → ... → end
 
+**Chat History Persistence:**
+- Uses PostgreSQL for conversation state storage in production (LangGraph Server deployment)
+- Configured via `LANGGRAPH_POSTGRES_URI` environment variable in `langgraph.json`
+- Database tables are created automatically by LangGraph Server
+- In development mode (`npm run serve`), uses local `.langgraph_api` folder instead
+- Enables multi-turn conversations with full context retention
+
 ### LangGraph Configuration
 
 The `langgraph.json` file defines:
 - Graph export: `"agent": "./src/agent.ts:graph"`
+- PostgreSQL store configuration: `store.postgres.uri` points to `LANGGRAPH_POSTGRES_URI` env variable
 - Used by `@langchain/langgraph-cli` for deployment and studio
+
+## Deployment
+
+### Development Mode
+```bash
+npm run serve  # Uses .langgraph_api folder for local storage
+```
+
+### Production Deployment to LangGraph Server
+To use PostgreSQL checkpointing, deploy to LangGraph Server:
+1. Set `LANGGRAPH_POSTGRES_URI` environment variable
+2. Deploy using LangGraph Cloud or self-hosted LangGraph Server
+3. The server will automatically use PostgreSQL for all state persistence
+
+Note: The checkpointer configuration is managed by LangGraph Server, not in application code.
 
 ### TypeScript Configuration
 
