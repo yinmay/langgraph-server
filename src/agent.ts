@@ -3,6 +3,7 @@ import { AIMessage } from "@langchain/core/messages";
 import { callModel, AgentState } from "./nodes/callModel.js";
 import { toolsNode } from "./nodes/toolsNode.js";
 import { processPdf } from "./nodes/processPdf.js";
+import { createCheckpointer } from "./config/checkpoint.js";
 
 // Route function to determine next node
 function routeModelOutput(state: typeof AgentState.State): string {
@@ -39,5 +40,9 @@ const workflow = new StateGraph(AgentState)
   // This means that after `tools` is called, `callModel` node is called next.
   .addEdge("tools", "callModel");
 
-// Compile the graph
-export const graph = workflow.compile();
+// Initialize PostgreSQL checkpointer and compile the graph
+const checkpointer = await createCheckpointer();
+
+// Compile the graph with PostgreSQL checkpointer
+// This will store all conversation state and history in PostgreSQL database
+export const graph = workflow.compile({ checkpointer });

@@ -5,6 +5,15 @@ export async function processPdf(state: typeof AgentState.State) {
   const { messages } = state;
 
   let pdfContentAccumulator = "";
+  let lastMessageHasPdf = false;
+
+  // Check if the last message contains PDF file
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage && Array.isArray(lastMessage.content)) {
+    lastMessageHasPdf = lastMessage.content.some(
+      (item: any) => item.type === "file" && item.mimeType === "application/pdf"
+    );
+  }
 
   // Process messages to handle PDF files
   const processedMessages = await Promise.all(
@@ -72,5 +81,6 @@ export async function processPdf(state: typeof AgentState.State) {
   return {
     messages: processedMessages,
     pdfContent: pdfContentAccumulator.trim(),
+    lastMessageIsPdf: lastMessageHasPdf,
   };
 }
